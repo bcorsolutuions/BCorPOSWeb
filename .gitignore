@@ -1,0 +1,20 @@
+# local tooling / personal
+.claude/
+# generated data, backups and logs
+bi/
+backup/
+*.log
+# working files
+prompt.docx
+tofaisal.txt
+# frontend build and dependencies
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/next-env.d.ts
+frontend/tsconfig.tsbuildinfo
+# environment files (server addresses, keys) stay local
+frontend/.env
+frontend/.env.*
+.DS_Store

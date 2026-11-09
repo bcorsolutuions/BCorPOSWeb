@@ -1,0 +1,296 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 221 83% 40%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+    --success: 142 71% 35%;
+    --success-foreground: 210 40% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 222 47% 11%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 83% 40%;
+    --radius: 0.5rem;
+  }
+
+  /* Gulf theme — deep emerald green primary + warm gold accents, ivory
+     background. Additive: Light/Dark are untouched, this is a third
+     selectable option (see theme-switcher.tsx). */
+  .gulf {
+    --background: 45 38% 97%;
+    --foreground: 150 30% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 150 30% 14%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 150 30% 14%;
+    --primary: 152 48% 22%;
+    --primary-foreground: 45 60% 94%;
+    --secondary: 42 55% 90%;
+    --secondary-foreground: 150 30% 14%;
+    --muted: 42 30% 93%;
+    --muted-foreground: 150 15% 38%;
+    --accent: 42 75% 55%;
+    --accent-foreground: 150 30% 14%;
+    --destructive: 0 65% 42%;
+    --destructive-foreground: 45 60% 94%;
+    --success: 152 48% 30%;
+    --success-foreground: 45 60% 94%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 150 30% 14%;
+    --border: 42 35% 82%;
+    --input: 42 35% 82%;
+    --ring: 42 75% 50%;
+  }
+
+  /* My mode — default light palette, used until the user customises it (see lib/theme/custom-theme.ts, which
+     overrides these variables inline from the saved colours). Status colours stay fixed so they keep their meaning. */
+  .mine {
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 221 83% 53%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 213 40% 93%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 30% 94%;
+    --muted-foreground: 215 20% 38%;
+    --accent: 38 92% 50%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+    --success: 142 71% 35%;
+    --success-foreground: 210 40% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 222 47% 11%;
+    --border: 214 24% 87%;
+    --input: 214 24% 87%;
+    --ring: 221 83% 53%;
+  }
+
+  .dark {
+    --background: 222 47% 8%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 10%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 10%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 217 91% 60%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  [dir="rtl"] body {
+    @apply font-arabic;
+  }
+}
+
+/* Isolate Latin numerals/codes embedded inside RTL text blocks */
+.bidi-isolate {
+  unicode-bidi: plaintext;
+}
+
+/* DevExtreme <-> design system color bridging (POS-critical grids) */
+.dx-swatch-bcor {
+  --dx-color-primary: hsl(var(--primary));
+}
+
+/* Thermal receipt printing: only .receipt-print-area survives print,
+   sized for standard 80mm POS printer rolls (see components/pos/receipt.tsx).
+   Direction/lang are set on the element itself so an Arabic receipt still
+   prints RTL even if the app UI is in English at the time. */
+@media screen {
+  .receipt-print-area {
+    display: none;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .receipt-print-area,
+  .receipt-print-area * {
+    visibility: visible;
+  }
+  .receipt-print-area {
+    display: block;
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0;
+    width: 80mm;
+  }
+}
+
+/* Full-page A4 document printing (Purchase Order, and any future
+   supplier-facing document) — same on-screen-hide/print-reveal mechanism as
+   .receipt-print-area above, but sized for a standard printer page instead
+   of an 80mm thermal roll. Kept as a separate class/block rather than
+   widening the thermal rule so both can coexist on a page without fighting
+   over what "the" print area is. */
+@media screen {
+  .doc-print-area {
+    display: none;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .doc-print-area,
+  .doc-print-area * {
+    visibility: visible;
+  }
+  .doc-print-area {
+    display: block;
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0;
+    width: 100%;
+  }
+}
+
+/* Wide/many-column documents (Reports & Analytics — up to 12 columns on
+   Sales Report (Detailed)) opt into this via an extra "print-landscape"
+   class alongside .doc-print-area. Portrait's ~180mm usable width forced
+   headers like "Discount"/"VAT" to wrap into each other, which is what
+   made the printed page look nothing like the wide on-screen Preview
+   dialog — landscape's ~277mm usable width is close enough to the
+   Preview's own on-screen width that the two now render the same way.
+   Assigns the CSS Paged Media "page" property to route only this element
+   to a named @page with size: landscape, so portrait documents elsewhere
+   (Purchase Order/Invoice/GRN's own .doc-print-area, no modifier class)
+   keep using the default @page untouched. */
+.doc-print-area.print-landscape {
+  page: report-landscape;
+}
+@page report-landscape {
+  size: landscape;
+  margin: 12mm;
+}
+
+/* Item shelf labels (Item Master's "Print Label") — same screen-hide/print-
+   reveal mechanism as .receipt-print-area/.doc-print-area above, sized for
+   a common small label (50mm x 30mm) instead of a receipt roll or A4 page.
+   Repeats N copies of the same label in a wrapping grid so a "print 12"
+   request fills as many label sheets as it takes, one label per cell. */
+@media screen {
+  .label-print-area {
+    display: none;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .label-print-area,
+  .label-print-area * {
+    visibility: visible;
+  }
+  .label-print-area {
+    display: flex;
+    flex-wrap: wrap;
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0;
+    width: 100%;
+    page: item-label;
+  }
+}
+@page item-label {
+  size: 50mm 30mm;
+  margin: 2mm;
+}
+
+/* Table QR labels (Restaurant → Table QR Codes' "Print") — same screen-hide/
+   print-reveal mechanism as .label-print-area above, sized larger (a full
+   thermal/A6-ish sticker: logo, "TABLE 05", a large scannable QR, "Scan to
+   Order") since this needs to be readable from arm's length on a table,
+   unlike a shelf price tag. */
+@media screen {
+  .qr-label-print-area {
+    display: none;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .qr-label-print-area,
+  .qr-label-print-area * {
+    visibility: visible;
+  }
+  .qr-label-print-area {
+    display: flex;
+    flex-wrap: wrap;
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0;
+    width: 100%;
+    page: qr-table-label;
+  }
+}
+@page qr-table-label {
+  size: 80mm 100mm;
+  margin: 3mm;
+}
+
+/* Financial statements (Profit & Loss, Balance Sheet): unlike .doc-print-area these are shown on screen as they are, and only
+   the statement itself is kept when printing (menu, filters and buttons are hidden). */
+@media print {
+  body:has(.statement-print-area) * {
+    visibility: hidden;
+  }
+  .statement-print-area,
+  .statement-print-area * {
+    visibility: visible;
+  }
+  .statement-print-area {
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0;
+    width: 100%;
+    padding: 12mm;
+  }
+}

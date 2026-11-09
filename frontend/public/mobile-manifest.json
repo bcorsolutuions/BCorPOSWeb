@@ -1,0 +1,15 @@
+{
+  "name": "BCor Waiter",
+  "short_name": "BCor Waiter",
+  "description": "BCor POS Enterprise — Waiter Mobile Ordering",
+  "start_url": "/mobile",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "/branding/logo.jpeg", "sizes": "192x192", "type": "image/jpeg" },
+    { "src": "/branding/logo.jpeg", "sizes": "512x512", "type": "image/jpeg" }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "extends": ["next/core-web-vitals"],
+  "rules": {
+    "no-restricted-syntax": [
+      "warn",
+      {
+        "selector": "Literal[value=/^.*[a-zA-Z]{2,}.*$/]:matches(JSXText)",
+        "message": "Avoid hardcoded UI strings; use next-intl translation keys."
+      }
+    ]
+  }
+}
