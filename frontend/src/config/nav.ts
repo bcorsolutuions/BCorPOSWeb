@@ -254,6 +254,8 @@ export const navConfig: NavEntry[] = [
       { labelKey: "nav.profitLoss", href: "/accounting/reports/profit-loss", icon: TrendingUp },
       { labelKey: "nav.balanceSheet", href: "/accounting/reports/balance-sheet", icon: Landmark },
       { labelKey: "nav.generalLedger", href: "/accounting/reports/general-ledger", icon: BookText },
+      { labelKey: "nav.accountsReceivable", href: "/accounting/reports/accounts-receivable", icon: ReceiptText },
+      { labelKey: "nav.accountsPayable", href: "/accounting/reports/accounts-payable", icon: Receipt },
     ],
   },
   {

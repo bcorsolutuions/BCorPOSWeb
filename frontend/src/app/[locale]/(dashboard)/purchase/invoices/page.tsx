@@ -17,6 +17,8 @@ import { useAuthStore } from "@/stores/auth-store";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataGridWrapper } from "@/components/shared/data-grid-wrapper";
 import { ItemSearchCell, numberCellClass } from "@/components/shared/item-search-cell";
+import { QuickSupplierDialog } from "@/components/purchase/quick-supplier-dialog";
+import { QuickItemDialog } from "@/components/purchase/quick-item-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import {
@@ -28,6 +30,8 @@ import {
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { glMasterService } from "@/lib/api/services/gl-master-service";
 import { Trash2, Plus, Printer } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { apiErrorMessage } from "@/lib/api-error";
@@ -44,7 +48,17 @@ import { useItemBarcodes } from "@/hooks/use-item-barcodes";
 // lines (this screen uses "G" since the parent doc here is a GRN).
 const GRN_DOC_CD = 30030;
 
-const emptyLine = { itemCode: "", itemName: "", unitCode: "", qty: 1, rate: 0, discountPercentage: 0, taxPercentage: 0 };
+const emptyLine = {
+  lineType: "item" as "item" | "expense",
+  itemCode: "",
+  itemName: "",
+  unitCode: "",
+  glCode: "",
+  qty: 1,
+  rate: 0,
+  discountPercentage: 0,
+  taxPercentage: 0,
+};
 
 function defaultFormValues(): PurchaseInvoiceFormValues {
   return {
@@ -69,6 +83,11 @@ export default function PurchaseInvoicePage() {
   const queryClient = useQueryClient();
   const barcodeOf = useItemBarcodes();
   const [dialogOpen, setDialogOpen] = useState(false);
+  // Quick-add pop-ups (new supplier / new item typed from this screen). They are siblings of the document dialog, not inside its form.
+  const [supplierDialogOpen, setSupplierDialogOpen] = useState(false);
+  const [newItemLine, setNewItemLine] = useState<{ index: number; name: string } | null>(null);
+  const canAddSupplier = can(PERMISSIONS.SUPPLIER_MANAGE);
+  const canAddItem = can(PERMISSIONS.INVENTORY_MANAGE_ITEMS);
   // null = creating a new invoice; a number = viewing/editing that DocNo.
   const [editingDocNo, setEditingDocNo] = useState<number | null>(null);
   // "Create against GRN" is a one-shot quick-fill, same UX as purchase/grn's
@@ -102,6 +121,14 @@ export default function PurchaseInvoicePage() {
   });
 
   const vendorOptions = vendors?.items ?? [];
+  // Expense accounts for the expense / service lines (a line with no stock item). Empty when the company has no chart of accounts.
+  const { data: expenseAccounts = [] } = useQuery({
+    queryKey: ["gl-master", "purchase-expense", compId],
+    queryFn: async () => (await glMasterService.list()).items,
+    enabled: !!compId,
+    select: (all) => all.filter((a) => a.active && a.accountType === 4),
+  });
+
   const itemOptions = items?.items ?? [];
   const itemByCode = useMemo(() => Object.fromEntries(itemOptions.map((i) => [i.code, i])), [itemOptions]);
   const vendorNameByCode = Object.fromEntries(vendorOptions.map((v) => [v.code, v.vendorName]));
@@ -157,9 +184,11 @@ export default function PurchaseInvoicePage() {
         remarks: editingInvoice.remarks ?? "",
         lines: editingInvoice.details.length
           ? editingInvoice.details.map((d) => ({
-              itemCode: d.itemCode,
+              lineType: (d.itemType === "E" || !d.itemCode ? "expense" : "item") as "item" | "expense",
+              itemCode: d.itemCode ?? "",
               itemName: d.itemName ?? "",
               unitCode: d.unitCode ?? "",
+              glCode: d.glCode ?? "",
               qty: d.qty,
               rate: d.rate,
               discountPercentage: d.discountPercentage ?? 0,
@@ -198,10 +227,14 @@ export default function PurchaseInvoicePage() {
       totalDiscAmount: totalDiscount,
       details: values.lines.map((l) => {
         const { amount, discountAmount, taxAmount } = lineAmounts(l);
+        const expense = l.lineType === "expense";
         return {
-          itemCode: l.itemCode,
+          // an expense / service line has no stock item: it is marked "E" and carries its description and account
+          itemType: expense ? "E" : undefined,
+          itemCode: expense ? undefined : l.itemCode,
           itemName: l.itemName || undefined,
-          unitCode: l.unitCode || undefined,
+          unitCode: expense ? undefined : l.unitCode || undefined,
+          glCode: expense ? l.glCode || undefined : undefined,
           qty: l.qty,
           rate: l.rate,
           amount,
@@ -268,6 +301,8 @@ export default function PurchaseInvoicePage() {
     form.setValue("vendorCode", grn.vendorCode);
     replace(
       grn.details.map((d) => ({
+        lineType: "item" as const,
+        glCode: "",
         itemCode: d.itemCode,
         itemName: d.itemName ?? "",
         unitCode: d.unitCode,
@@ -372,7 +407,16 @@ export default function PurchaseInvoicePage() {
             <DialogTitle>{t("purchaseInvoice.title")}</DialogTitle>
           </DialogHeader>
           <Form {...form}>
-            <form className="space-y-4" onKeyDown={enterMovesToNextField} onSubmit={form.handleSubmit((v) => (editingDocNo != null ? updateMutation.mutate(v) : createMutation.mutate(v)))}>
+            <form className="space-y-4" onKeyDown={enterMovesToNextField} onSubmit={form.handleSubmit((v) => {
+              // with a chart of accounts, an expense line must say which account it is
+              const missing = v.lines.findIndex((l) => l.lineType === "expense" && expenseAccounts.length > 0 && !l.glCode);
+              if (missing >= 0) {
+                toast({ title: t("purchaseExpense.accountRequired", { line: missing + 1 }), variant: "destructive" });
+                return;
+              }
+              if (editingDocNo != null) updateMutation.mutate(v);
+              else createMutation.mutate(v);
+            })}>
               {editingDocNo == null && (
                 <div className="space-y-1 rounded-md border border-dashed p-3">
                   <FormLabel className="text-xs">{t("purchaseInvoice.grnReference")}</FormLabel>
@@ -421,7 +465,21 @@ export default function PurchaseInvoicePage() {
                   name="vendorCode"
                   render={({ field }) => (
                     <FormItem>
+                      <div className="flex items-center justify-between gap-2">
                       <FormLabel>{t("purchaseOrder.supplier")}</FormLabel>
+                      {canAddSupplier && (
+                        <Button
+                          type="button"
+                          variant="link"
+                          size="sm"
+                          className="h-auto p-0 text-xs"
+                          onClick={() => setSupplierDialogOpen(true)}
+                        >
+                          <Plus className="me-0.5 h-3 w-3" />
+                          {t("quickAdd.newSupplier")}
+                        </Button>
+                      )}
+                    </div>
                       <Select value={field.value} onValueChange={field.onChange}>
                         <FormControl>
                           <SelectTrigger>
@@ -486,10 +544,16 @@ export default function PurchaseInvoicePage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <FormLabel>{t("common.item")}</FormLabel>
-                  <Button type="button" variant="outline" size="sm" onClick={() => append(emptyLine)}>
-                    <Plus className="me-1 h-3.5 w-3.5" />
-                    {t("common.add")}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => append(emptyLine)}>
+                      <Plus className="me-1 h-3.5 w-3.5" />
+                      {t("common.add")}
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => append({ ...emptyLine, lineType: "expense" })}>
+                      <Plus className="me-1 h-3.5 w-3.5" />
+                      {t("purchaseExpense.addLine")}
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto rounded-md border">
@@ -512,26 +576,66 @@ export default function PurchaseInvoicePage() {
                     <tbody>
                       {fields.map((field, index) => {
                         const line = watchedLines[index] ?? emptyLine;
+                        const isExpense = line?.lineType === "expense";
                         const { taxAmount, netTotal } = lineAmounts(line);
                         return (
                           <tr key={field.id} className={cn("border-b last:border-0", index % 2 === 1 && "bg-muted/20")}>
-                            <td className="px-2 py-1.5 align-top">
-                              <ItemSearchCell
-                                items={itemOptions}
-                                value={line?.itemCode ?? ""}
-                                onSelect={(item) => handleItemSelect(index, item)}
-                                placeholder={t("common.item")}
-                              />
-                            </td>
-                            <td className="px-2 py-1.5 align-top">
-                              <Input readOnly value={line?.itemCode ?? ""} className="bg-muted" />
-                            </td>
-                            <td className="px-2 py-1.5 align-top">
-                              <Input readOnly value={barcodeOf(line?.itemCode)} className="bg-muted font-mono text-xs" />
-                            </td>
-                            <td className="px-2 py-1.5 align-top">
-                              <Input readOnly value={line?.unitCode ?? ""} className="bg-muted" />
-                            </td>
+                            {isExpense ? (
+                              <>
+                                <td className="px-2 py-1.5 align-top">
+                                  <div className="flex items-center gap-1">
+                                    <Badge variant="secondary" className="shrink-0">
+                                      {t("purchaseExpense.badge")}
+                                    </Badge>
+                                    <Input
+                                      placeholder={t("purchaseExpense.description")}
+                                      maxLength={150}
+                                      {...form.register(`lines.${index}.itemName`)}
+                                    />
+                                  </div>
+                                </td>
+                                <td className="px-2 py-1.5 align-top" colSpan={3}>
+                                  {expenseAccounts.length > 0 ? (
+                                    <Select value={line?.glCode ?? ""} onValueChange={(v) => form.setValue(`lines.${index}.glCode`, v, { shouldDirty: true })}>
+                                      <SelectTrigger>
+                                        <SelectValue placeholder={t("purchaseExpense.account")} />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {expenseAccounts.map((a) => (
+                                          <SelectItem key={a.code} value={a.code}>
+                                            {a.code} - {a.glName}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  ) : (
+                                    <Input readOnly value="-" className="bg-muted" />
+                                  )}
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="px-2 py-1.5 align-top">
+                                  <ItemSearchCell
+                                    items={itemOptions}
+                                    value={line?.itemCode ?? ""}
+                                    onSelect={(item) => handleItemSelect(index, item)}
+                                    onCreateNew={canAddItem ? (typed) => setNewItemLine({ index, name: typed }) : undefined}
+                                    createNewLabel={t("quickAdd.newItem")}
+                                    placeholder={t("common.item")}
+                                  />
+                                </td>
+                                <td className="px-2 py-1.5 align-top">
+                                  <Input readOnly value={line?.itemCode ?? ""} className="bg-muted" />
+                                </td>
+                                <td className="px-2 py-1.5 align-top">
+                                  <Input readOnly value={barcodeOf(line?.itemCode)} className="bg-muted font-mono text-xs" />
+                                </td>
+                                <td className="px-2 py-1.5 align-top">
+                                  <Input readOnly value={line?.unitCode ?? ""} className="bg-muted" />
+                                </td>
+                              </>
+                            )}
                             <td className="px-2 py-1.5 align-top">
                               <Input
                                 type="number"
@@ -628,6 +732,20 @@ export default function PurchaseInvoicePage() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      <QuickSupplierDialog
+        open={supplierDialogOpen}
+        onOpenChange={setSupplierDialogOpen}
+        onCreated={(vendor) => form.setValue("vendorCode", vendor.code, { shouldDirty: true, shouldValidate: true })}
+      />
+      <QuickItemDialog
+        open={newItemLine != null}
+        onOpenChange={(open) => !open && setNewItemLine(null)}
+        initialName={newItemLine?.name}
+        onCreated={(item) => {
+          if (newItemLine) handleItemSelect(newItemLine.index, item);
+        }}
+      />
 
       {/* Print-only twin — a full A4 invoice document, distinct from the
           on-screen edit dialog above. Only rendered once a saved invoice is

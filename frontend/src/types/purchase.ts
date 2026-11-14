@@ -8,11 +8,13 @@ import type { AuditFields } from "./common";
 export interface PurchaseOrderDetail {
   id?: string;
   rowID?: number;
+  /** "E" = an expense / service line (no stock item): itemCode and unitCode are empty, itemName is its description, expGLCode its account */
   itemType?: string | null;
-  itemCode: string;
+  itemCode?: string | null;
   itemName?: string | null;
   itemRemarks?: string | null;
-  unitCode: string;
+  unitCode?: string | null;
+  expGLCode?: string | null;
   qty: number;
   rate: number;
   discountPercentage?: number | null;
@@ -42,9 +44,12 @@ export interface PurchaseOrder {
 }
 
 export interface CreatePurchaseOrderDetailInput {
-  itemCode: string;
+  /** "E" = expense / service line: no itemCode / unitCode, itemName is the description, expGLCode the account */
+  itemType?: string;
+  itemCode?: string;
   itemName?: string;
-  unitCode: string;
+  unitCode?: string;
+  expGLCode?: string;
   qty: number;
   rate: number;
   amount?: number;
@@ -103,9 +108,12 @@ export interface GoodsReceipt extends AuditFields {
 export interface PurchaseInvoiceDetail {
   id?: string;
   rowID?: number;
-  itemCode: string;
+  /** "E" = an expense / service line: no itemCode, itemName is its description, glCode its account */
+  itemType?: string | null;
+  itemCode?: string | null;
   itemName?: string | null;
   unitCode?: string | null;
+  glCode?: string | null;
   qty: number;
   rate: number;
   discountPercentage?: number | null;
@@ -145,9 +153,12 @@ export interface PurchaseInvoice {
 }
 
 export interface CreatePurchaseInvoiceDetailInput {
-  itemCode: string;
+  /** "E" = expense / service line: no itemCode, itemName is the description, glCode the account */
+  itemType?: string;
+  itemCode?: string;
   itemName?: string;
   unitCode?: string;
+  glCode?: string;
   qty: number;
   rate: number;
   amount: number;

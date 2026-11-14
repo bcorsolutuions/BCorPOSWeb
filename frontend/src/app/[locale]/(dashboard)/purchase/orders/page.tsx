@@ -9,6 +9,7 @@ import { purchaseOrderService } from "@/lib/api/services/purchase-service";
 import { vendorMasterService } from "@/lib/api/services/vendor-master-service";
 import { itemMasterService } from "@/lib/api/services/item-master-service";
 import { posLookupService } from "@/lib/api/services/pos-lookup-service";
+import { glMasterService } from "@/lib/api/services/gl-master-service";
 import { purchaseOrderSchema, type PurchaseOrderFormValues } from "@/schemas/purchase.schema";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { usePermission } from "@/hooks/use-permission";
@@ -16,6 +17,8 @@ import { useAuthStore } from "@/stores/auth-store";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataGridWrapper } from "@/components/shared/data-grid-wrapper";
 import { ItemSearchCell, numberCellClass } from "@/components/shared/item-search-cell";
+import { QuickSupplierDialog } from "@/components/purchase/quick-supplier-dialog";
+import { QuickItemDialog } from "@/components/purchase/quick-item-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import {
@@ -39,7 +42,17 @@ import type { ItemMaster } from "@/types/item-master";
 import { enterMovesToNextField } from "@/lib/prevent-enter-submit";
 import { useItemBarcodes } from "@/hooks/use-item-barcodes";
 
-const emptyLine = { itemCode: "", itemName: "", unitCode: "", qty: 1, rate: 0, discountPercentage: 0, taxPercentage: 0 };
+const emptyLine = {
+  lineType: "item" as "item" | "expense",
+  itemCode: "",
+  itemName: "",
+  unitCode: "",
+  glCode: "",
+  qty: 1,
+  rate: 0,
+  discountPercentage: 0,
+  taxPercentage: 0,
+};
 
 function defaultFormValues(currency: string): PurchaseOrderFormValues {
   return {
@@ -63,6 +76,11 @@ export default function PurchaseOrderPage() {
   const queryClient = useQueryClient();
   const barcodeOf = useItemBarcodes();
   const [dialogOpen, setDialogOpen] = useState(false);
+  // Quick-add pop-ups (new supplier / new item typed from this screen). They are siblings of the document dialog, not inside its form.
+  const [supplierDialogOpen, setSupplierDialogOpen] = useState(false);
+  const [newItemLine, setNewItemLine] = useState<{ index: number; name: string } | null>(null);
+  const canAddSupplier = can(PERMISSIONS.SUPPLIER_MANAGE);
+  const canAddItem = can(PERMISSIONS.INVENTORY_MANAGE_ITEMS);
   // null = creating a new order; a number = viewing that DocNo. Read-only
   // for now (a PUT route exists on the backend, but purchaseOrderService has
   // no update() yet) — this just fixes "clicking a row does nothing", the
@@ -91,6 +109,14 @@ export default function PurchaseOrderPage() {
   });
   const { data: vendors } = useQuery({ queryKey: ["vendors-lookup", compId], queryFn: () => vendorMasterService.list() });
   const { data: items } = useQuery({ queryKey: ["items-lookup", compId], queryFn: () => itemMasterService.list() });
+
+  // Expense accounts for the expense / service lines (a line with no stock item). Empty when the company has no chart of accounts.
+  const { data: expenseAccounts = [] } = useQuery({
+    queryKey: ["gl-master", "purchase-expense", compId],
+    queryFn: async () => (await glMasterService.list()).items,
+    enabled: !!compId,
+    select: (all) => all.filter((a) => a.active && a.accountType === 4),
+  });
 
   const vendorOptions = vendors?.items ?? [];
   const itemOptions = items?.items ?? [];
@@ -146,9 +172,11 @@ export default function PurchaseOrderPage() {
         remarks: editingOrder.remarks ?? "",
         lines: editingOrder.details.length
           ? editingOrder.details.map((d) => ({
-              itemCode: d.itemCode,
+              lineType: (d.itemType === "E" || !d.itemCode ? "expense" : "item") as "item" | "expense",
+              itemCode: d.itemCode ?? "",
               itemName: d.itemName ?? "",
-              unitCode: d.unitCode,
+              unitCode: d.unitCode ?? "",
+              glCode: d.expGLCode ?? "",
               qty: d.qty,
               rate: d.rate,
               discountPercentage: d.discountPercentage ?? 0,
@@ -171,10 +199,14 @@ export default function PurchaseOrderPage() {
         totalDiscAmount: totalDiscount,
         details: values.lines.map((l) => {
           const { amount, discountAmount, taxAmount } = lineAmounts(l);
+          const expense = l.lineType === "expense";
           return {
-            itemCode: l.itemCode,
+            // an expense / service line has no stock item: it is marked "E" and carries its description and account
+            itemType: expense ? "E" : undefined,
+            itemCode: expense ? undefined : l.itemCode,
             itemName: l.itemName || undefined,
-            unitCode: l.unitCode,
+            unitCode: expense ? undefined : l.unitCode,
+            expGLCode: expense ? l.glCode || undefined : undefined,
             qty: l.qty,
             rate: l.rate,
             amount,
@@ -280,7 +312,15 @@ export default function PurchaseOrderPage() {
             <DialogTitle>{t("purchaseOrder.title")}</DialogTitle>
           </DialogHeader>
           <Form {...form}>
-            <form className="space-y-4" onKeyDown={enterMovesToNextField} onSubmit={form.handleSubmit((v) => createMutation.mutate(v))}>
+            <form className="space-y-4" onKeyDown={enterMovesToNextField} onSubmit={form.handleSubmit((v) => {
+              // with a chart of accounts, an expense line must say which account it is
+              const missing = v.lines.findIndex((l) => l.lineType === "expense" && expenseAccounts.length > 0 && !l.glCode);
+              if (missing >= 0) {
+                toast({ title: t("purchaseExpense.accountRequired", { line: missing + 1 }), variant: "destructive" });
+                return;
+              }
+              createMutation.mutate(v);
+            })}>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="space-y-1">
                   <FormLabel className="text-xs">{t("purchaseOrder.poNumber")}</FormLabel>
@@ -310,7 +350,21 @@ export default function PurchaseOrderPage() {
                 name="vendorCode"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t("purchaseOrder.supplier")}</FormLabel>
+                    <div className="flex items-center justify-between gap-2">
+                      <FormLabel>{t("purchaseOrder.supplier")}</FormLabel>
+                      {canAddSupplier && !editingDocNo && (
+                        <Button
+                          type="button"
+                          variant="link"
+                          size="sm"
+                          className="h-auto p-0 text-xs"
+                          onClick={() => setSupplierDialogOpen(true)}
+                        >
+                          <Plus className="me-0.5 h-3 w-3" />
+                          {t("quickAdd.newSupplier")}
+                        </Button>
+                      )}
+                    </div>
                     <Select value={field.value} onValueChange={field.onChange} disabled={!!editingDocNo}>
                       <FormControl>
                         <SelectTrigger>
@@ -349,10 +403,16 @@ export default function PurchaseOrderPage() {
                 <div className="flex items-center justify-between">
                   <FormLabel>{t("common.item")}</FormLabel>
                   {!editingDocNo && (
-                    <Button type="button" variant="outline" size="sm" onClick={() => append(emptyLine)}>
-                      <Plus className="me-1 h-3.5 w-3.5" />
-                      {t("common.add")}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={() => append(emptyLine)}>
+                        <Plus className="me-1 h-3.5 w-3.5" />
+                        {t("common.add")}
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={() => append({ ...emptyLine, lineType: "expense" })}>
+                        <Plus className="me-1 h-3.5 w-3.5" />
+                        {t("purchaseExpense.addLine")}
+                      </Button>
+                    </div>
                   )}
                 </div>
 
@@ -376,30 +436,76 @@ export default function PurchaseOrderPage() {
                     <tbody>
                       {fields.map((field, index) => {
                         const line = watchedLines[index] ?? emptyLine;
+                        const isExpense = line?.lineType === "expense";
                         const { taxAmount, netTotal } = lineAmounts(line);
                         return (
                           <tr key={field.id} className={cn("border-b last:border-0", index % 2 === 1 && "bg-muted/20")}>
-                            <td className="px-2 py-1.5 align-top">
-                              {editingDocNo ? (
-                                <Input readOnly value={line?.itemName || line?.itemCode || ""} className="bg-muted" />
-                              ) : (
-                                <ItemSearchCell
-                                  items={itemOptions}
-                                  value={line?.itemCode ?? ""}
-                                  onSelect={(item) => handleItemSelect(index, item)}
-                                  placeholder={t("common.item")}
-                                />
-                              )}
-                            </td>
-                            <td className="px-2 py-1.5 align-top">
-                              <Input readOnly value={line?.itemCode ?? ""} className="bg-muted" />
-                            </td>
-                            <td className="px-2 py-1.5 align-top">
-                              <Input readOnly value={barcodeOf(line?.itemCode)} className="bg-muted font-mono text-xs" />
-                            </td>
-                            <td className="px-2 py-1.5 align-top">
-                              <Input readOnly value={line?.unitCode ?? ""} className="bg-muted" />
-                            </td>
+                            {isExpense ? (
+                              <>
+                                <td className="px-2 py-1.5 align-top">
+                                  <div className="flex items-center gap-1">
+                                    <Badge variant="secondary" className="shrink-0">
+                                      {t("purchaseExpense.badge")}
+                                    </Badge>
+                                    <Input
+                                      readOnly={!!editingDocNo}
+                                      className={cn(editingDocNo && "bg-muted")}
+                                      placeholder={t("purchaseExpense.description")}
+                                      maxLength={100}
+                                      {...form.register(`lines.${index}.itemName`)}
+                                    />
+                                  </div>
+                                </td>
+                                <td className="px-2 py-1.5 align-top" colSpan={3}>
+                                  {expenseAccounts.length > 0 ? (
+                                    <Select
+                                      value={line?.glCode ?? ""}
+                                      onValueChange={(v) => form.setValue(`lines.${index}.glCode`, v, { shouldDirty: true })}
+                                      disabled={!!editingDocNo}
+                                    >
+                                      <SelectTrigger className={cn(editingDocNo && "bg-muted")}>
+                                        <SelectValue placeholder={t("purchaseExpense.account")} />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {expenseAccounts.map((a) => (
+                                          <SelectItem key={a.code} value={a.code}>
+                                            {a.code} - {a.glName}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  ) : (
+                                    <Input readOnly value="-" className="bg-muted" />
+                                  )}
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="px-2 py-1.5 align-top">
+                                  {editingDocNo ? (
+                                    <Input readOnly value={line?.itemName || line?.itemCode || ""} className="bg-muted" />
+                                  ) : (
+                                    <ItemSearchCell
+                                      items={itemOptions}
+                                      value={line?.itemCode ?? ""}
+                                      onSelect={(item) => handleItemSelect(index, item)}
+                                    onCreateNew={canAddItem ? (typed) => setNewItemLine({ index, name: typed }) : undefined}
+                                    createNewLabel={t("quickAdd.newItem")}
+                                      placeholder={t("common.item")}
+                                    />
+                                  )}
+                                </td>
+                                <td className="px-2 py-1.5 align-top">
+                                  <Input readOnly value={line?.itemCode ?? ""} className="bg-muted" />
+                                </td>
+                                <td className="px-2 py-1.5 align-top">
+                                  <Input readOnly value={barcodeOf(line?.itemCode)} className="bg-muted font-mono text-xs" />
+                                </td>
+                                <td className="px-2 py-1.5 align-top">
+                                  <Input readOnly value={line?.unitCode ?? ""} className="bg-muted" />
+                                </td>
+                              </>
+                            )}
                             <td className="px-2 py-1.5 align-top">
                               <Input
                                 type="number"
@@ -504,6 +610,20 @@ export default function PurchaseOrderPage() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      <QuickSupplierDialog
+        open={supplierDialogOpen}
+        onOpenChange={setSupplierDialogOpen}
+        onCreated={(vendor) => form.setValue("vendorCode", vendor.code, { shouldDirty: true, shouldValidate: true })}
+      />
+      <QuickItemDialog
+        open={newItemLine != null}
+        onOpenChange={(open) => !open && setNewItemLine(null)}
+        initialName={newItemLine?.name}
+        onCreated={(item) => {
+          if (newItemLine) handleItemSelect(newItemLine.index, item);
+        }}
+      />
 
       {/* Print-only twin — a full A4 purchase order document to send to the
           supplier, distinct from the on-screen view dialog above (which is

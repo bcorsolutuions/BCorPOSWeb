@@ -29,7 +29,7 @@ export default function SupplierMasterPage() {
 
   const fields: FieldConfig<VendorMasterFormValues>[] = useMemo(
     () => [
-      { name: "code", labelKey: "common.code", type: "text", hintKey: "accounting.supplierCodeHint" },
+      { name: "code", labelKey: "common.code", type: "text", placeholderKey: "accounting.codeAutomatic", lockOnEdit: true, hintKey: "accounting.supplierCodeHint" },
       { name: "vendorName", labelKey: "common.name", type: "text" },
       { name: "vendorNameArb", labelKey: "common.nameAr", type: "text" },
       {

@@ -60,7 +60,7 @@ export const customerMasterService = {
     const { data } = await apiClient.post<RawDto>(
       "/CustomerMaster",
       {
-        code: payload.code,
+        code: payload.code?.trim() || null, // blank: the API generates the next customer code
         compID: compId,
         siteID: payload.siteId,
         active: payload.active,

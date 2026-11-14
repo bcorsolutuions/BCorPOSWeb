@@ -207,7 +207,7 @@ export function CrudDataGridPage<TEntity extends { id: string }, TFormValues ext
                 {fields
                   .filter((field) => field.name !== "active")
                   .map((field) => (
-                    <EntityFormField key={String(field.name)} control={form.control} field={field} />
+                    <EntityFormField key={String(field.name)} control={form.control} field={field} editing={!!editingEntity} />
                   ))}
                 {renderExtra?.({ form, editingEntity })}
                 {/* Active is always the last thing on a master form, after any extra sections. */}

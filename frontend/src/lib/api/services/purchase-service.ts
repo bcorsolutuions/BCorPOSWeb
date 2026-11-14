@@ -130,7 +130,8 @@ function withDetailDefaults(d: CreatePurchaseInvoiceDetailInput, compId: string)
     refDocCd: d.refDocCd,
     refCompID: d.refCompID,
     refSiteID: d.refSiteID,
-    glCode: "",
+    // an expense / service line carries its account; stock-item lines have none (the column is NOT NULL, so "")
+    glCode: d.glCode ?? "",
     accCompID: compId,
   };
 }
@@ -142,9 +143,11 @@ function toPurchaseInvoiceDetail(raw: Record<string, unknown>): PurchaseInvoiceD
   return {
     id: raw.id as string | undefined,
     rowID: raw.rowID as number | undefined,
-    itemCode: raw.itemCode as string,
+    itemType: (raw.itemType as string | null | undefined)?.trim() || null,
+    itemCode: raw.itemCode as string | null | undefined,
     itemName: raw.itemName as string | null | undefined,
     unitCode: raw.unitCode as string | null | undefined,
+    glCode: (raw.glCode as string | null | undefined)?.trim() || null,
     qty: raw.invQty as number,
     rate: raw.price as number,
     discountPercentage: raw.discountPercentage as number | null | undefined,

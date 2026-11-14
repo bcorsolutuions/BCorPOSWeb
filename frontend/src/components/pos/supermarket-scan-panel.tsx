@@ -12,6 +12,7 @@ import { usePosSessionStore } from "@/stores/pos-session-store";
 import { BarcodeScannerInput } from "@/components/pos/barcode-scanner-input";
 import { SelectComboOptionsDialog } from "@/components/pos/select-combo-options-dialog";
 import { CashDrawerButton } from "@/components/pos/cash-drawer-button";
+import { QuickPayButtons, type QuickPayType } from "@/components/pos/quick-pay-buttons";
 import { CustomerDisplayButton } from "@/components/pos/customer-display-button";
 import { PriceCheckButton } from "@/components/pos/price-check-button";
 import { StockLookupButton } from "@/components/pos/stock-lookup-button";
@@ -44,7 +45,11 @@ import type { ComboDetailDto, ComboMasterDto, ResolvedComboComponent } from "@/t
  */
 export interface SupermarketActions {
   onHold: () => void;
+  /** the "Payment" button: opens the payment dialog */
   onPay: () => void;
+  /** Cash / Card / BenefitPay: pay the full bill in one tap and print */
+  onQuickPay: (type: QuickPayType) => void;
+  payLoading?: boolean;
   onHeldBills: () => void;
   onReturn: () => void;
   holdDisabled: boolean;
@@ -506,9 +511,13 @@ export const SupermarketScanPanel = forwardRef<HTMLInputElement, { actions?: Sup
             )}
           </div>
 
-          <Button size="lg" className="h-14 w-full shrink-0 text-lg short:h-11" disabled={actions.payDisabled} onClick={actions.onPay}>
-            {t("pay")}
-          </Button>
+          <QuickPayButtons
+            className="shrink-0"
+            onQuickPay={actions.onQuickPay}
+            onPayment={actions.onPay}
+            disabled={actions.payDisabled}
+            loading={actions.payLoading}
+          />
         </div>
 
         <Dialog open={fallbackOpen} onOpenChange={setFallbackOpen}>

@@ -41,6 +41,10 @@ export interface FieldConfig<T extends FieldValues> {
   /** Fields to clear when the user picks a different value here (e.g. category → sub category). */
   resetOnChange?: Path<T>[];
   placeholder?: string;
+  /** Same as placeholder, as an i18n key. */
+  placeholderKey?: string;
+  /** Read-only once the record exists (e.g. an automatic code that can no longer be changed). */
+  lockOnEdit?: boolean;
   /** Layout classes for the field's wrapper — e.g. a grid column span when the form is laid out in columns (see CrudDataGridPage's formGridClassName). */
   className?: string;
   /** Small helper text shown under the field (an i18n key). */
@@ -52,9 +56,12 @@ export interface FieldConfig<T extends FieldValues> {
 export function EntityFormField<T extends FieldValues>({
   control,
   field: config,
+  editing = false,
 }: {
   control: Control<T>;
   field: FieldConfig<T>;
+  /** The form edits an existing record (not a new one). */
+  editing?: boolean;
 }) {
   const t = useTranslations();
   const { watch, setValue } = useFormContext<T>();
@@ -116,7 +123,9 @@ export function EntityFormField<T extends FieldValues>({
                             ? "password"
                             : "text"
                 }
-                placeholder={config.placeholder}
+                placeholder={config.placeholderKey ? t(config.placeholderKey) : config.placeholder}
+                readOnly={config.lockOnEdit && editing}
+                className={config.lockOnEdit && editing ? "bg-muted" : undefined}
               />
             )}
           </FormControl>

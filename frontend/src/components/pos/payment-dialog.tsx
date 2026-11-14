@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Banknote, CreditCard, Wallet, Landmark, Trash2, Ticket, Award } from "lucide-react";
 import {
@@ -41,6 +41,23 @@ const methodLabelKeys: Record<PosPaymentType, "cash" | "card" | "benefitPay" | "
   GiftVoucher: "giftVoucher",
   LoyaltyRedemption: "loyaltyRedemption",
 };
+
+// Notes / steps the quick cash buttons round the bill up to (0.5 covers 3-decimal currencies such as BHD).
+const CASH_STEPS = [0.5, 1, 5, 10, 20, 50, 100];
+
+/** "Exact" first, then the bill rounded up to the next note: e.g. 14.300 -> 14.300, 14.500, 15, 20, 50, 100. */
+function quickCashAmounts(remaining: number): number[] {
+  if (remaining <= 0) return [];
+  const out = [round(remaining)];
+  for (const step of CASH_STEPS) {
+    const up = round(Math.ceil(round(remaining / step)) * step);
+    if (up > remaining && !out.includes(up)) out.push(up);
+  }
+  return out.slice(0, 6);
+}
+
+// Methods that are paid in one go with the whole remaining amount (no voucher / points lookup needed).
+const ONE_TAP: PosPaymentType[] = ["Cash", "Card", "BenefitPay", "Wallet", "Credit"];
 
 export function PaymentDialog({
   open,
@@ -118,6 +135,29 @@ export function PaymentDialog({
     else loyaltyCheck.reset();
   }
 
+  /** One tap: tender `tendered` with `type` and finish the sale straight away (it always covers what is still to pay). */
+  function quickPay(type: PosPaymentType, tendered: number) {
+    if (loading || remaining <= 0 || tendered < remaining) return;
+    if (type === "Credit" && !hasCustomer) return;
+    const finalPayments: PosPayment[] = [...payments, { type, amount: tendered }];
+    onComplete(finalPayments);
+    setPayments([]);
+  }
+
+  // Number keys 1-7 pick a payment method while the cursor is not in a text box (fast keyboard checkout).
+  function handleHotkey(e: KeyboardEvent) {
+    const target = e.target as HTMLElement;
+    if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || e.ctrlKey || e.altKey || e.metaKey) return;
+    const index = Number(e.key) - 1;
+    if (Number.isInteger(index) && index >= 0 && index < methods.length) {
+      const m = methods[index];
+      if (m && !(m === "Credit" && !hasCustomer)) {
+        e.preventDefault();
+        selectMethod(m);
+      }
+    }
+  }
+
   function addPayment() {
     const value = Number(amount || 0);
     if (value <= 0) return;
@@ -171,14 +211,14 @@ export function PaymentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-2xl" onKeyDown={handleHotkey}>
         <DialogHeader>
           <DialogTitle>{t("payment")}</DialogTitle>
         </DialogHeader>
 
         <div className="rounded-md bg-muted p-4 text-center">
           <p className="text-sm text-muted-foreground">{t("remainingBalance")}</p>
-          <p className="text-3xl font-bold tabular-nums">{formatMoney(remaining, currency, locale)}</p>
+          <p className="text-5xl font-bold tabular-nums">{formatMoney(remaining, currency, locale)}</p>
           {change > 0 && (
             <p className="mt-1 text-sm font-medium text-success">
               {t("change")}: {formatMoney(change, currency, locale)}
@@ -186,26 +226,64 @@ export function PaymentDialog({
           )}
         </div>
 
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-          {methods.map((m) => {
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {methods.map((m, i) => {
             const Icon = methodIcons[m];
             const disabled = m === "Credit" && !hasCustomer;
             return (
               <button
                 key={m}
+                type="button"
                 disabled={disabled}
                 onClick={() => selectMethod(m)}
+                aria-pressed={method === m}
                 className={cn(
-                  "flex flex-col items-center gap-1 rounded-md border p-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40",
-                  method === m ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent",
+                  "relative flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-lg border-2 p-3 text-base font-semibold transition-colors active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40",
+                  method === m ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-accent",
                 )}
               >
-                <Icon className="h-5 w-5" />
+                <span className="absolute start-2 top-1 text-[11px] font-normal text-muted-foreground">{i + 1}</span>
+                <Icon className="h-8 w-8" />
                 {t(methodLabelKeys[m])}
               </button>
             );
           })}
         </div>
+
+        {remaining > 0 && method === "Cash" && (
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">{t("quickCash")}</p>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+              {quickCashAmounts(remaining).map((tender, i) => (
+                <Button
+                  key={tender}
+                  type="button"
+                  variant={i === 0 ? "default" : "outline"}
+                  disabled={loading}
+                  onClick={() => quickPay("Cash", tender)}
+                  className="h-16 flex-col gap-0 text-lg font-bold tabular-nums"
+                >
+                  {i === 0 ? t("exactAmount") : formatMoney(tender, currency, locale)}
+                  <span className="text-[11px] font-normal opacity-80">
+                    {i === 0 ? formatMoney(tender, currency, locale) : `${t("change")} ${formatMoney(round(tender - remaining), currency, locale)}`}
+                  </span>
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {remaining > 0 && ONE_TAP.includes(method) && method !== "Cash" && (
+          <Button
+            type="button"
+            size="lg"
+            disabled={loading || (method === "Credit" && !hasCustomer)}
+            onClick={() => quickPay(method, remaining)}
+            className="h-16 w-full text-lg font-bold"
+          >
+            {t("payFull", { amount: formatMoney(remaining, currency, locale), method: t(methodLabelKeys[method]) })}
+          </Button>
+        )}
 
         {method === "GiftVoucher" ? (
           <div className="space-y-2">
@@ -293,6 +371,7 @@ export function PaymentDialog({
         ) : (
           <div className="flex items-end gap-2">
             <div className="flex-1 space-y-1">
+              <p className="text-xs text-muted-foreground">{t("otherAmount")}</p>
               <MoneyInput
                 currency={currency}
                 value={amount}

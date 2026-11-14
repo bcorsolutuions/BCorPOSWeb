@@ -98,7 +98,7 @@ export function PurchaseInvoicePrint({
                   {d.itemName || d.itemCode}
                   {barcodeOf(d.itemCode) && <span className="block font-mono text-[10px] text-gray-600">{barcodeOf(d.itemCode)}</span>}
                 </td>
-                <td className="py-1.5 text-gray-600">{d.itemCode}</td>
+                <td className="py-1.5 text-gray-600">{d.itemCode || d.glCode}</td>
                 <td className="py-1.5 text-center">{d.unitCode}</td>
                 <td className="py-1.5 text-end">{d.qty}</td>
                 <td className="py-1.5 text-end">{formatMoneyPlain(d.rate, currency, locale)}</td>

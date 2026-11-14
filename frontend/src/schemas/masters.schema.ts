@@ -138,7 +138,8 @@ export type UnitMasterFormValues = z.infer<typeof unitMasterSchema>;
 // Real Customer Master form — backs masters/customers/page.tsx against
 // BCorDFWebApi's actual CustomerMasterController (see types/customer-master.ts).
 export const customerMasterSchema = z.object({
-  code: z.string().min(1, "validation.required"),
+  // blank = the next automatic customer code (C00001, ...)
+  code: z.string().optional(),
   custName: z.string().min(1, "validation.required"),
   custNameArabic: z.string().optional(),
   custCatCode: z.string().optional(),
@@ -165,7 +166,8 @@ export type CustomerFormValues = z.infer<typeof customerSchema>;
 // Real Vendor (Supplier) Master form — backs masters/suppliers/page.tsx
 // against BCorDFWebApi's actual VendorMasterController (see types/vendor-master.ts).
 export const vendorMasterSchema = z.object({
-  code: z.string().min(1, "validation.required"),
+  // blank = the next automatic supplier code (S00001, ...)
+  code: z.string().optional(),
   vendorName: z.string().min(1, "validation.required"),
   vendorNameArb: z.string().optional(),
   vendorCatCode: z.string().optional(),

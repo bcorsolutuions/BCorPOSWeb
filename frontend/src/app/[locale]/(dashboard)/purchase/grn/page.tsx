@@ -155,10 +155,11 @@ export default function GoodsReceiptPage() {
     const po = await purchaseOrderService.get(compId, siteId, docNo);
     form.setValue("vendorCode", po.vendorCode);
     replace(
-      po.details.map((d) => ({
-        itemCode: d.itemCode,
+      // an expense / service line of the PO has no stock item, so there is nothing to receive for it
+      po.details.filter((d) => d.itemType !== "E" && !!d.itemCode).map((d) => ({
+        itemCode: d.itemCode ?? "",
         itemName: d.itemName ?? "",
-        unitCode: d.unitCode,
+        unitCode: d.unitCode ?? "",
         orderedQty: d.qty,
         qty: d.qty,
         rate: d.rate,

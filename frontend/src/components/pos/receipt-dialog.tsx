@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Printer } from "lucide-react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -14,15 +14,30 @@ export function ReceiptDialog({
   open,
   onOpenChange,
   pos,
+  autoPrint = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   pos: PosDto | null;
+  /** Print the receipt as soon as it shows, then close (used by the one-tap Cash / Card / BenefitPay buttons). */
+  autoPrint?: boolean;
 }) {
   const t = useTranslations("pos");
   const tc = useTranslations("common");
   const appLocale = useLocale() as Locale;
   const [printLocale, setPrintLocale] = useState<Locale>(appLocale);
+
+  // One-tap payments (Cash / Card / BenefitPay) print the receipt straight away: wait a moment for the print-only twin below to be
+  // mounted, print, then close so the till is ready for the next sale. The browser shows its print window unless it runs in kiosk-printing mode.
+  useEffect(() => {
+    if (!open || !autoPrint || !pos) return;
+    const id = window.setTimeout(() => {
+      window.print();
+      onOpenChange(false);
+    }, 300);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, autoPrint, pos]);
 
   if (!pos) return null;
 

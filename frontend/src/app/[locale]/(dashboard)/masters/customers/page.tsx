@@ -29,7 +29,7 @@ export default function CustomerMasterPage() {
 
   const fields: FieldConfig<CustomerMasterFormValues>[] = useMemo(
     () => [
-      { name: "code", labelKey: "common.code", type: "text", hintKey: "accounting.customerCodeHint" },
+      { name: "code", labelKey: "common.code", type: "text", placeholderKey: "accounting.codeAutomatic", lockOnEdit: true, hintKey: "accounting.customerCodeHint" },
       { name: "custName", labelKey: "common.name", type: "text" },
       { name: "custNameArabic", labelKey: "common.nameAr", type: "text" },
       {

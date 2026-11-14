@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { ItemMaster } from "@/types/item-master";
@@ -27,11 +28,16 @@ export function ItemSearchCell({
   value,
   onSelect,
   placeholder,
+  onCreateNew,
+  createNewLabel,
 }: {
   items: ItemMaster[];
   value: string;
   onSelect: (item: ItemMaster) => void;
   placeholder: string;
+  /** When given, the list ends with a "New item" row that calls this with what was typed (the page opens its quick-add pop-up). */
+  onCreateNew?: (query: string) => void;
+  createNewLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -160,6 +166,23 @@ export function ItemSearchCell({
                   {i.barCode && <span className="font-mono text-xs text-muted-foreground">{i.barCode}</span>}
                 </button>
               ))
+            )}
+            {onCreateNew && (
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  const typed = query.trim();
+                  setOpen(false);
+                  setQuery("");
+                  onCreateNew(typed);
+                }}
+                className="sticky bottom-0 flex w-full items-center gap-1 border-t bg-popover px-2 py-1.5 text-start text-sm font-medium text-primary hover:bg-accent"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                {createNewLabel ?? "New item"}
+                {query.trim() ? ` "${query.trim()}"` : ""}
+              </button>
             )}
           </div>,
           document.body,

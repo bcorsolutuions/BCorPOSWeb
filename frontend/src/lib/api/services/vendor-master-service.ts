@@ -73,7 +73,7 @@ export const vendorMasterService = {
     const { data } = await apiClient.post<RawDto>(
       "/VendorMaster",
       {
-        code: payload.code,
+        code: payload.code?.trim() || null, // blank: the API generates the next supplier code
         compID: compId,
         siteID: payload.siteId,
         active: payload.active,

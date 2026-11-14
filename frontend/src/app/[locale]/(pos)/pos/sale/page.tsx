@@ -32,6 +32,7 @@ import { QuickCustomerRegisterDialog } from "@/components/pos/quick-customer-reg
 import { HeldBillsDrawer } from "@/components/pos/held-bills-drawer";
 import { ReturnBillDialog } from "@/components/pos/return-bill-dialog";
 import { ReceiptDialog } from "@/components/pos/receipt-dialog";
+import { QuickPayButtons, type QuickPayType } from "@/components/pos/quick-pay-buttons";
 import { SalonCustomerDialog } from "@/components/pos/salon-customer-dialog";
 import { getSalonOrderState, setSalonOrderState, stripSalonMarker, type SalonOrderState } from "@/lib/pos/salon-order";
 import { CashDrawerButton } from "@/components/pos/cash-drawer-button";
@@ -78,6 +79,11 @@ export default function PosSalePage() {
   const [returnOpen, setReturnOpen] = useState(false);
   const [cartSheetOpen, setCartSheetOpen] = useState(false);
   const [receiptPos, setReceiptPos] = useState<PosDto | null>(null);
+  // One-tap payment (Cash / Card / BenefitPay): the method waiting for a dialog that has to come first (salon customer, loyalty
+  // register), the method ready to run on the next render, and whether the receipt of the sale being saved prints by itself.
+  const [pendingQuick, setPendingQuick] = useState<QuickPayType | null>(null);
+  const [quickRun, setQuickRun] = useState<QuickPayType | null>(null);
+  const [autoPrintNext, setAutoPrintNext] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const pendingSync = useOfflineSync();
 
@@ -118,7 +124,56 @@ export default function PosSalePage() {
   const salonState = hasSalon ? getSalonOrderState(cart.remarks) : null;
   const payBlocked = salonState === "OPEN";
 
+  // After the dialogs that may have to come first (salon customer, loyalty register): carry on with the one-tap method the cashier chose,
+  // or open the payment dialog when they pressed "Payment".
+  function proceedToPayment() {
+    if (pendingQuick) {
+      setQuickRun(pendingQuick);
+      setPendingQuick(null);
+    } else {
+      setPaymentOpen(true);
+    }
+  }
+
+  /** Cash / Card / BenefitPay: the same checks as the Payment button, then pay the whole bill with that method and print. */
+  function handleQuickPay(type: QuickPayType) {
+    if (cart.lines.length === 0 || billingBlocked || payMutation.isPending) return;
+    if (payBlocked) {
+      toast({ title: t("salonMarkDoneFirst"), variant: "destructive" });
+      return;
+    }
+    if (hasSalon && !cart.customerCode) {
+      setPendingQuick(type);
+      setSalonNext("pay");
+      setSalonCustomerOpen(true);
+      return;
+    }
+    if (loyaltySettings?.enableCustomerLoyalty && !cart.customerCode) {
+      setPendingQuick(type);
+      setQuickRegisterOpen(true);
+      return;
+    }
+    payInFull(type);
+  }
+
+  function payInFull(type: QuickPayType) {
+    setAutoPrintNext(true);
+    payMutation.mutate([{ type, amount: billTotals.netTotal }]);
+  }
+
+  // A one-tap method chosen before a dialog (salon customer / loyalty register) runs on the render after that dialog closed, so the
+  // bill total and customer it uses are the current ones.
+  useEffect(() => {
+    if (!quickRun) return;
+    const type = quickRun;
+    setQuickRun(null);
+    payInFull(type);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickRun]);
+
   function handlePayClick() {
+    setPendingQuick(null);
+    setAutoPrintNext(false);
     if (cart.lines.length === 0 || billingBlocked) return;
     if (payBlocked) {
       toast({ title: t("salonMarkDoneFirst"), variant: "destructive" });
@@ -228,38 +283,41 @@ export default function PosSalePage() {
   // Hold | (Save Order on salon tills) | Pay — shared by the cart column and the phone bottom sheet.
   function renderHoldPay(opts: { buttonClass?: string; closeSheet?: boolean }) {
     return (
-      <div className={`grid gap-2 ${hasSalon ? "grid-cols-3" : "grid-cols-2"}`}>
-        <Button
-          variant="outline"
-          size="lg"
-          className={opts.buttonClass}
-          disabled={cart.lines.length === 0 || holdMutation.isPending || billingBlocked}
-          onClick={handleHold}
-        >
-          {t("holdBill")}
-        </Button>
-        {hasSalon && (
+      <div className="space-y-2">
+        <div className={`grid gap-2 ${hasSalon ? "grid-cols-2" : "grid-cols-1"}`}>
           <Button
-            variant="secondary"
+            variant="outline"
             size="lg"
             className={opts.buttonClass}
-            disabled={cart.lines.length === 0 || holdMutation.isPending || billingBlocked || salonState === "DONE"}
-            onClick={handleSaveOrder}
+            disabled={cart.lines.length === 0 || holdMutation.isPending || billingBlocked}
+            onClick={handleHold}
           >
-            {t("saveOrder")}
+            {t("holdBill")}
           </Button>
-        )}
-        <Button
-          size="lg"
-          className={`text-base ${opts.buttonClass ?? ""}`}
+          {hasSalon && (
+            <Button
+              variant="secondary"
+              size="lg"
+              className={opts.buttonClass}
+              disabled={cart.lines.length === 0 || holdMutation.isPending || billingBlocked || salonState === "DONE"}
+              onClick={handleSaveOrder}
+            >
+              {t("saveOrder")}
+            </Button>
+          )}
+        </div>
+        <QuickPayButtons
           disabled={cart.lines.length === 0 || billingBlocked || payBlocked}
-          onClick={() => {
+          loading={payMutation.isPending}
+          onQuickPay={(type) => {
+            if (opts.closeSheet) setCartSheetOpen(false);
+            handleQuickPay(type);
+          }}
+          onPayment={() => {
             if (opts.closeSheet) setCartSheetOpen(false);
             handlePayClick();
           }}
-        >
-          {t("pay")}
-        </Button>
+        />
       </div>
     );
   }
@@ -334,7 +392,10 @@ export default function PosSalePage() {
       }
       cart.clear();
     },
-    onError: (err) => toast({ title: apiErrorMessage(err, tc("errorGeneric")), variant: "destructive" }),
+    onError: (err) => {
+      setAutoPrintNext(false);
+      toast({ title: apiErrorMessage(err, tc("errorGeneric")), variant: "destructive" });
+    },
   });
 
   usePosKeyboardShortcuts({
@@ -386,6 +447,8 @@ export default function PosSalePage() {
             actions={{
               onHold: () => holdMutation.mutate(undefined),
               onPay: handlePayClick,
+              onQuickPay: handleQuickPay,
+              payLoading: payMutation.isPending,
               onHeldBills: () => setHeldOpen(true),
               onReturn: () => setReturnOpen(true),
               holdDisabled: cart.lines.length === 0 || holdMutation.isPending || billingBlocked,
@@ -492,29 +555,38 @@ export default function PosSalePage() {
         hasCustomer={!!cart.customerCode}
         customerCode={cart.customerCode}
         loading={payMutation.isPending}
-        onComplete={(payments) => payMutation.mutate(payments)}
+        onComplete={(payments) => {
+          setAutoPrintNext(false); // paid through the Payment dialog: the receipt dialog shows as before
+          payMutation.mutate(payments);
+        }}
       />
 
       <QuickCustomerRegisterDialog
         open={quickRegisterOpen}
-        onOpenChange={setQuickRegisterOpen}
+        onOpenChange={(open) => {
+          setQuickRegisterOpen(open);
+          if (!open) setPendingQuick(null); // closed without registering or skipping: forget the one-tap method
+        }}
         onRegistered={(code, name) => {
           cart.setCustomer(code, name);
           setQuickRegisterOpen(false);
-          setPaymentOpen(true);
+          proceedToPayment();
         }}
         onSkip={() => {
           setQuickRegisterOpen(false);
-          setPaymentOpen(true);
+          proceedToPayment();
         }}
       />
 
       <SalonCustomerDialog
         open={salonCustomerOpen}
-        onOpenChange={setSalonCustomerOpen}
+        onOpenChange={(open) => {
+          setSalonCustomerOpen(open);
+          if (!open) setPendingQuick(null);
+        }}
         onConfirm={(code, name) => {
           cart.setCustomer(code, name);
-          if (salonNext === "pay") setPaymentOpen(true);
+          if (salonNext === "pay") proceedToPayment();
           else if (salonNext === "hold") holdMutation.mutate({ customer: { code, name } });
           else holdMutation.mutate({ state: salonState ?? "OPEN", customer: { code, name } });
         }}
@@ -522,7 +594,17 @@ export default function PosSalePage() {
 
       <HeldBillsDrawer open={heldOpen} onOpenChange={setHeldOpen} />
       <ReturnBillDialog open={returnOpen} onOpenChange={setReturnOpen} />
-      <ReceiptDialog open={!!receiptPos} onOpenChange={(open) => !open && setReceiptPos(null)} pos={receiptPos} />
+      <ReceiptDialog
+        open={!!receiptPos}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReceiptPos(null);
+            setAutoPrintNext(false);
+          }
+        }}
+        pos={receiptPos}
+        autoPrint={autoPrintNext}
+      />
     </div>
   );
 }

@@ -4,15 +4,28 @@ import { z } from "zod";
 // (see types/purchase.ts) — no expectedDate/branchId/supplierId, since the
 // real create DTO has no expected-delivery-date field and site/vendor are
 // addressed by siteId query param + vendorCode, not a supplierId/branchId.
-const poLineItem = z.object({
-  itemCode: z.string().min(1, "validation.required"),
-  itemName: z.string().optional(),
-  unitCode: z.string().min(1, "validation.required"),
-  qty: z.coerce.number().positive("validation.mustBePositive"),
-  rate: z.coerce.number().min(0, "validation.mustBeZeroOrMore"),
-  discountPercentage: z.coerce.number().min(0).max(100).optional(),
-  taxPercentage: z.coerce.number().min(0).optional(),
-});
+// A line is either a stock item (item code + unit) or an expense / service line (a description and an account, no item). The account is
+// checked on the page (it is only required when the company has expense accounts).
+const poLineItem = z
+  .object({
+    lineType: z.enum(["item", "expense"]).default("item"),
+    itemCode: z.string().optional(),
+    itemName: z.string().optional(),
+    unitCode: z.string().optional(),
+    glCode: z.string().optional(),
+    qty: z.coerce.number().positive("validation.mustBePositive"),
+    rate: z.coerce.number().min(0, "validation.mustBeZeroOrMore"),
+    discountPercentage: z.coerce.number().min(0).max(100).optional(),
+    taxPercentage: z.coerce.number().min(0).optional(),
+  })
+  .superRefine((l, ctx) => {
+    if (l.lineType === "expense") {
+      if (!l.itemName?.trim()) ctx.addIssue({ code: "custom", path: ["itemName"], message: "validation.required" });
+    } else {
+      if (!l.itemCode) ctx.addIssue({ code: "custom", path: ["itemCode"], message: "validation.required" });
+      if (!l.unitCode) ctx.addIssue({ code: "custom", path: ["unitCode"], message: "validation.required" });
+    }
+  });
 
 export const purchaseOrderSchema = z.object({
   vendorCode: z.string().min(1, "validation.required"),
@@ -53,10 +66,13 @@ export type GoodsReceiptFormValues = z.infer<typeof goodsReceiptSchema>;
 // (see types/purchase.ts) — vendorCode/docDt/vendorBillNo/vendorBillDate/
 // remarks at header, discount%/tax% optional per line since the backend
 // supports them but a minimal invoice doesn't require them.
-const invoiceLineItem = z.object({
-  itemCode: z.string().min(1, "validation.required"),
+const invoiceLineItem = z
+  .object({
+  lineType: z.enum(["item", "expense"]).default("item"),
+  itemCode: z.string().optional(),
   itemName: z.string().optional(),
   unitCode: z.string().optional(),
+  glCode: z.string().optional(),
   qty: z.coerce.number().positive("validation.mustBePositive"),
   rate: z.coerce.number().min(0, "validation.mustBeZeroOrMore"),
   discountPercentage: z.coerce.number().min(0).max(100).optional(),
@@ -71,7 +87,14 @@ const invoiceLineItem = z.object({
   refDocCd: z.coerce.number().optional(),
   refCompID: z.string().optional(),
   refSiteID: z.string().optional(),
-});
+  })
+  .superRefine((l, ctx) => {
+    if (l.lineType === "expense") {
+      if (!l.itemName?.trim()) ctx.addIssue({ code: "custom", path: ["itemName"], message: "validation.required" });
+    } else if (!l.itemCode) {
+      ctx.addIssue({ code: "custom", path: ["itemCode"], message: "validation.required" });
+    }
+  });
 
 export const purchaseInvoiceSchema = z.object({
   vendorCode: z.string().min(1, "validation.required"),

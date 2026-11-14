@@ -184,7 +184,9 @@
     "balanceSheet": "Balance Sheet",
     "posPostingAccounts": "POS Posting Accounts",
     "customerCategoryMaster": "Customer Category",
-    "supplierCategoryMaster": "Supplier Category"
+    "supplierCategoryMaster": "Supplier Category",
+    "accountsReceivable": "Accounts Receivable",
+    "accountsPayable": "Accounts Payable"
   },
   "dashboard": {
     "today": {
@@ -382,7 +384,11 @@
     "itemsScannedCount": "{count} item(s) scanned",
     "weightKg": "kg",
     "perKg": "/kg",
-    "scanRequiredForWeighed": "This item must be scanned — its weight isn't known"
+    "scanRequiredForWeighed": "This item must be scanned — its weight isn't known",
+    "quickCash": "Quick cash (amount handed over)",
+    "exactAmount": "Exact",
+    "payFull": "Pay {amount} by {method}",
+    "otherAmount": "Other amount / split payment"
   },
   "receipt": {
     "phone": "Phone",
@@ -2376,11 +2382,51 @@
     "partyDone": "Accounts created: {customers} customer(s), {suppliers} supplier(s).",
     "partyNoCode": "{count} could not get an account because a GL account with the same code already exists.",
     "codeConflicts": "{count} account(s) or group(s) were skipped because this company already uses that code for something else (an older numbering). They were left as they are.",
-    "customerCodeHint": "With the Accounts module the customer code is also its account code in GL Master (Sundry Debtors, control type DRS), so it cannot be a code that is already an account.",
-    "supplierCodeHint": "With the Accounts module the supplier code is also its account code in GL Master (Sundry Creditors, control type CRS), so it cannot be a code that is already an account."
+    "customerCodeHint": "Leave blank: the code is generated automatically (C00001, C00002 ...). With the Accounts module it is also the customer's account code in GL Master (Sundry Debtors, control type DRS).",
+    "supplierCodeHint": "Leave blank: the code is generated automatically (S00001, S00002 ...). With the Accounts module it is also the supplier's account code in GL Master (Sundry Creditors, control type CRS).",
+    "receivableTitle": "Accounts Receivable",
+    "payableTitle": "Accounts Payable",
+    "receivableIntro": "What each customer owes at a date, bill by bill, aged from the bill date.",
+    "payableIntro": "What is owed to each supplier at a date, bill by bill, aged from the bill date.",
+    "customer": "Customer",
+    "supplier": "Supplier",
+    "customers": "Customers",
+    "suppliers": "Suppliers",
+    "totalReceivable": "Total receivable",
+    "totalPayable": "Total payable",
+    "openBills": "Open bills",
+    "over90": "Over 90 days",
+    "days0to30": "0 - 30 days",
+    "days31to60": "31 - 60 days",
+    "days61to90": "61 - 90 days",
+    "noBill": "No bill",
+    "billAge": "{days} days old",
+    "billAmount": "bill",
+    "noReceivables": "No customer owes anything at this date.",
+    "noPayables": "Nothing is owed to suppliers at this date.",
+    "agingNote": "Aged from the bill date. A negative amount is an advance or credit. \"No bill\" is entries on the account that have no bill reference.",
+    "codeAutomatic": "Automatic"
   },
   "masters": {
     "parentCategory": "Parent category",
     "categoryGl": "GL account"
+  },
+  "purchaseExpense": {
+    "addLine": "Add expense line",
+    "badge": "Expense",
+    "description": "Description (e.g. freight, repairs)",
+    "account": "Expense account",
+    "accountRequired": "Line {line}: choose the expense account."
+  },
+  "quickAdd": {
+    "newSupplier": "New supplier",
+    "newItem": "New item",
+    "supplierSaved": "Supplier {code} - {name} added",
+    "itemSaved": "Item \"{name}\" added",
+    "category": "Category",
+    "noSupplierCategory": "No supplier category exists yet. Add one in Masters > Supplier Categories first.",
+    "noUnitOrTax": "A unit and a tax code are needed. Add them in Masters (Units, Tax Codes) first.",
+    "completeLater": "Only the essentials are asked here. Complete the rest later in the master.",
+    "supplierCodeAuto": "The supplier code (also its account code) is generated automatically."
   }
 }
